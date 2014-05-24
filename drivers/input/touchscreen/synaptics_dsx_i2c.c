@@ -1053,7 +1053,7 @@ static struct synaptics_rmi4_data *syna_rmi4_data=0;
 static struct regulator *vdd_regulator=0;
 static struct regulator *vdd_regulator_i2c=0;
 static int syna_use_gesture = 0 ;
-static int syna_use_gesture2 = 1 ;  //flag to support tp2.0
+static int syna_use_gesture2 = 0 ;  //flag to support tp2.0
 static int syna_test_max_err_count = 10;
 static char synaptics_vendor_str[32];  //vendor string
 static char *synaptics_id_str;

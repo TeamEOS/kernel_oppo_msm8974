@@ -253,13 +253,8 @@ void send_user_defined_gamma(char * buf)
 
 void set_gamma(int index)
 {
-	printk("%s : %d \n",__func__,index);
-	//if (get_pcb_version() >= HW_VERSION__20) { /* For Find7s */
-    //    return;
-    //}
-
     mutex_lock(&cabc_mutex);
-	
+
 	if(flag_lcd_off == true)
     {
         printk(KERN_INFO "lcd is off,don't allow to set gamma\n");
@@ -267,23 +262,31 @@ void set_gamma(int index)
         return;
     }
     mdss_dsi_clk_ctrl(panel_data, 1);
-	if(index <= 0 || index >4){
-		mutex_unlock(&cabc_mutex);
-        return;
-	}
+
 	switch(index)
     {
 		case 1:
+			 printk("%s : %d \n",__func__,index);
+			 gamma_index = 1;
 			 mdss_dsi_panel_cmds_send(panel_data, &gamma1);
 			 break;
 		case 2:
+			 printk("%s : %d \n",__func__,index);
+			 gamma_index = 2;
 			 mdss_dsi_panel_cmds_send(panel_data, &gamma2);
 			 break;
 		case 3:
+			 printk("%s : %d \n",__func__,index);
+			 gamma_index = 3;
 			 mdss_dsi_panel_cmds_send(panel_data, &gamma3);
 			 break;
 		case 4:
+			 printk("%s : %d \n",__func__,index);
+			 gamma_index = 4;
 			 mdss_dsi_panel_cmds_send(panel_data, &gamma4);
+			 break;
+		default:
+			 pr_err("%s : invalid gamma index %d. Nothing changed \n",__func__,index);
 			 break;
 	}
 	mdss_dsi_clk_ctrl(panel_data, 0);
@@ -292,29 +295,26 @@ void set_gamma(int index)
 
 void set_resume_gamma(int index)
 {
-	printk("%s : %d \n",__func__,index);
-	//if (get_pcb_version() >= HW_VERSION__20) { /* For Find7s */
-    //    return;
-    //}
-   if(index <= 1 || index >4){
-        return;
-	}
     switch(index)
     {
 		case 1:
+			 printk("%s : %d \n",__func__,index);
 			 mdss_dsi_panel_cmds_send(panel_data, &gamma1);
 			 break;
 		case 2:
+			 printk("%s : %d \n",__func__,index);
 			 mdss_dsi_panel_cmds_send(panel_data, &gamma2);
 			 break;
 		case 3:
+			 printk("%s : %d \n",__func__,index);
 			 mdss_dsi_panel_cmds_send(panel_data, &gamma3);
 			 break;
 		case 4:
+			 printk("%s : %d \n",__func__,index);
 			 mdss_dsi_panel_cmds_send(panel_data, &gamma4);
 			 break;
 		default:
-			pr_err("%s : invalid gamma index %d yxr \n",__func__,index);
+			pr_err("%s : invalid gamma index %d. Nothing changed \n",__func__,index);
 			break;
 	}
 }
@@ -361,7 +361,7 @@ int set_cabc(int level)
 			set_backlight_pwm(1);
             break;
         default:
-            pr_err("%s Leavel %d is not supported!\n",__func__,level);
+            pr_err("%s Level %d is not supported!\n",__func__,level);
             ret = -1;
             break;
     }

@@ -1849,8 +1849,6 @@ static int qup_i2c_resume(struct device *device)
 	}
 	return 0;
 }
-#endif
-/*OPPO yuyi 2013-11-27 delete end for restore 2030B*/
 #endif /* CONFIG_PM */
 
 static const struct dev_pm_ops i2c_qup_dev_pm_ops = {

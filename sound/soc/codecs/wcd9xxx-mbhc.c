@@ -1876,7 +1876,8 @@ static int wcd9xxx_cs_get_vdec_value(struct wcd9xxx_mbhc *mbhc,
 	dt[0].vddio = false;
 	dt[0].hwvalue = true;
 	dt[0].hphl_status = wcd9xxx_hphl_status(mbhc);
-	dt[0].dce = wcd9xxx_mbhc_setup_hs_polling(mbhc, true);
+	dt[0].dce = wcd9xxx_mbhc_setup_hs_polling(mbhc, &mbhc->mbhc_bias_regs,
+						  true);
 	dt[0].mic_bias = false;
 
 	for (i = 1; i < NUM_DCE_PLUG_INS_DETECT - 1; i++) {

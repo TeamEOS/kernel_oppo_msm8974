@@ -1091,8 +1091,6 @@ fail_cmd:
 	return ret;
 }
 
-#ifndef CONFIG_VENDOR_EDIT
-/* liuyan@Onlinerd.driver, 2014/03/17  Add for qccom lowlatecny 24bit patch */
 int adm_open(int port_id, int path, int rate, int channel_mode, int topology,
 			int perf_mode, uint16_t bits_per_sample)
 {

@@ -1,4 +1,4 @@
-/* Copyright (c) 2012-2013, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012-2014, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -524,8 +524,11 @@ void msm_dsi_controller_cfg(int enable)
 	if (readl_poll_timeout((ctrl_base + DSI_STATUS),
 				status,
 				((status & 0x02) == 0),
-				DSI_POLL_SLEEP_US, DSI_POLL_TIMEOUT_US))
+				DSI_POLL_SLEEP_US, DSI_POLL_TIMEOUT_US)) {
 		pr_err("%s: DSI status=%x failed\n", __func__, status);
+		pr_err("%s: Doing sw reset\n", __func__);
+		msm_dsi_sw_reset();
+	}
 
 	/* Check for x_HS_FIFO_EMPTY */
 	if (readl_poll_timeout((ctrl_base + DSI_FIFO_STATUS),
@@ -935,17 +938,18 @@ void msm_dsi_cmdlist_rx(struct mdss_dsi_ctrl_pdata *ctrl,
 	if (req->cb)
 		req->cb(len);
 }
-void msm_dsi_cmdlist_commit(struct mdss_dsi_ctrl_pdata *ctrl, int from_mdp)
+int msm_dsi_cmdlist_commit(struct mdss_dsi_ctrl_pdata *ctrl, int from_mdp)
 {
 	struct dcs_cmd_req *req;
 	int dsi_on;
+	int ret = -EINVAL;
 
 	mutex_lock(&ctrl->mutex);
 	dsi_on = dsi_host_private->dsi_on;
 	mutex_unlock(&ctrl->mutex);
 	if (!dsi_on) {
 		pr_err("try to send DSI commands while dsi is off\n");
-		return;
+		return ret;
 	}
 
 	mutex_lock(&ctrl->cmd_mutex);
@@ -953,7 +957,7 @@ void msm_dsi_cmdlist_commit(struct mdss_dsi_ctrl_pdata *ctrl, int from_mdp)
 
 	if (!req) {
 		mutex_unlock(&ctrl->cmd_mutex);
-		return;
+		return ret;
 	}
 
 	msm_dsi_clk_ctrl(&ctrl->panel_data, 1);
@@ -972,6 +976,7 @@ void msm_dsi_cmdlist_commit(struct mdss_dsi_ctrl_pdata *ctrl, int from_mdp)
 	msm_dsi_clk_ctrl(&ctrl->panel_data, 0);
 
 	mutex_unlock(&ctrl->cmd_mutex);
+	return 0;
 }
 
 static int msm_dsi_cal_clk_rate(struct mdss_panel_data *pdata,
@@ -1222,7 +1227,7 @@ static int msm_dsi_cont_on(struct mdss_panel_data *pdata)
 	return 0;
 }
 
-static int msm_dsi_bta_status_check(struct mdss_dsi_ctrl_pdata *ctrl_pdata)
+int msm_dsi_bta_status_check(struct mdss_dsi_ctrl_pdata *ctrl_pdata)
 {
 	int ret = 0;
 

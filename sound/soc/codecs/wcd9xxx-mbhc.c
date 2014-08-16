@@ -133,7 +133,11 @@
 #define WCD9XXX_V_CS_HS_MAX 500
 #define WCD9XXX_V_CS_NO_MIC 5
 #define WCD9XXX_MB_MEAS_DELTA_MAX_MV 80
+#ifndef CONFIG_VENDOR_EDIT
+#define WCD9XXX_CS_MEAS_DELTA_MAX_MV 12
+#else
 #define WCD9XXX_CS_MEAS_DELTA_MAX_MV 90 //10 Zhaoan 2014/3/7,  change to 90 to adapte new headset
+#endif
 #ifdef CONFIG_VENDOR_EDIT
 //liuyan 2013-12-9 add for headset type detec
 #define WCD9XXX_CS_MAX_MV 120
@@ -141,7 +145,6 @@
 #define WCD9XXX_CS_IPHONE_HIG_THRD 665
 #define WCD9XXX_CS_IPHONE_LOW_THRD 590
 #endif
-#define WCD9XXX_CS_MEAS_DELTA_MAX_MV 12
 
 static int impedance_detect_en;
 module_param(impedance_detect_en, int,

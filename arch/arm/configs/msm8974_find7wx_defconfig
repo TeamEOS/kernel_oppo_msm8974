@@ -566,6 +566,7 @@ CONFIG_CRYPTO_XTS=y
 CONFIG_CRYPTO_DEV_QCRYPTO=y
 CONFIG_CRYPTO_DEV_QCE=y
 CONFIG_CRYPTO_DEV_QCEDEV=y
+CONFIG_PFT=y
 # huqiao@Mobile Phone Software Dept.Driver, 2014/02/08, Add for shineled config
 CONFIG_SN3193_SLED=y
 # endif /* VENDOR_EDIT */

@@ -90,7 +90,7 @@ enum ngd_status {
 };
 
 static int ngd_slim_runtime_resume(struct device *device);
-static int ngd_slim_power_up(struct msm_slim_ctrl *dev);
+static int ngd_slim_power_up(struct msm_slim_ctrl *dev, bool mdm_restart);
 
 static irqreturn_t ngd_slim_interrupt(int irq, void *d)
 {
@@ -99,50 +99,25 @@ static irqreturn_t ngd_slim_interrupt(int irq, void *d)
 	u32 stat = readl_relaxed(ngd + NGD_INT_STAT);
 	u32 pstat;
 
-/* OPPO 2014-03-26 Zhaoan.Xu@PhoneSW.Driver Modify begin for sound card can't register */
-#ifndef VENDOR_EDIT
-	if (stat & NGD_INT_TX_MSG_SENT) {
-		writel_relaxed(NGD_INT_TX_MSG_SENT, ngd + NGD_INT_CLR);
-		/* Make sure interrupt is cleared */
-#else
-    if ((stat & NGD_INT_MSG_BUF_CONTE) ||
-        (stat & NGD_INT_MSG_TX_INVAL) || (stat & NGD_INT_DEV_ERR) ||
-        (stat & NGD_INT_TX_NACKED_2)) {
-        writel_relaxed(stat, ngd + NGD_INT_CLR);
-        dev->err = -EIO;
-
-        dev_err(dev->dev, "NGD interrupt error:0x%x, err:%d", stat,
-        					dev->err);
-        /* Guarantee that error interrupts are cleared */
-#endif
-/* OPPO 2014-03-26 Zhaoan.Xu@PhoneSW.Driver Modify end */
-		mb();
-		if (dev->wr_comp)
-			complete(dev->wr_comp);
-/* OPPO 2014-03-26 Zhaoan.Xu@PhoneSW.Driver Modify begin for sound card not registered */
-#ifndef VENDOR_EDIT
-	} else if ((stat & NGD_INT_MSG_BUF_CONTE) ||
+	if ((stat & NGD_INT_MSG_BUF_CONTE) ||
 		(stat & NGD_INT_MSG_TX_INVAL) || (stat & NGD_INT_DEV_ERR) ||
 		(stat & NGD_INT_TX_NACKED_2)) {
-		dev_err(dev->dev, "NGD interrupt error:0x%x", stat);
 		writel_relaxed(stat, ngd + NGD_INT_CLR);
+		dev->err = -EIO;
+
+		dev_err(dev->dev, "NGD interrupt error:0x%x, err:%d", stat,
+								dev->err);
 		/* Guarantee that error interrupts are cleared */
 		mb();
-		if (((stat & NGD_INT_TX_NACKED_2) ||
-			(stat & NGD_INT_MSG_TX_INVAL))) {
-			dev->err = -EIO;
 		if (dev->wr_comp)
 			complete(dev->wr_comp);
-		}
-#else
+
 	} else if (stat & NGD_INT_TX_MSG_SENT) {
-    	writel_relaxed(NGD_INT_TX_MSG_SENT, ngd + NGD_INT_CLR);
-    	/* Make sure interrupt is cleared */
-    	mb();
-    	if (dev->wr_comp)
-    		complete(dev->wr_comp);
-#endif
-/* OPPO 2014-03-26 Zhaoan.Xu@PhoneSW.Driver Modify end */
+		writel_relaxed(NGD_INT_TX_MSG_SENT, ngd + NGD_INT_CLR);
+		/* Make sure interrupt is cleared */
+		mb();
+		if (dev->wr_comp)
+			complete(dev->wr_comp);
 	}
 	if (stat & NGD_INT_RX_MSG_RCVD) {
 		u32 rx_buf[10];
@@ -216,32 +191,45 @@ static int ngd_qmi_available(struct notifier_block *n, unsigned long code,
 static int mdm_ssr_notify_cb(struct notifier_block *n, unsigned long code,
 				void *_cmd)
 {
+	void __iomem *ngd;
 	struct msm_slim_mdm *mdm = container_of(n, struct msm_slim_mdm, nb);
 	struct msm_slim_ctrl *dev = container_of(mdm, struct msm_slim_ctrl,
 						mdm);
-	int ret;
+	struct slim_controller *ctrl = &dev->ctrl;
+	u32 laddr;
+	struct slim_device *sbdev;
 
 	switch (code) {
 	case SUBSYS_BEFORE_SHUTDOWN:
-		/* make sure runtime-pm doesn't suspend during modem SSR */
-		pm_runtime_get_noresume(dev->dev);
+		dev_err(dev->dev,
+			"SLIM %lu external_modem SSR notify cb", code);
+		/* vote for runtime-pm so that ADSP doesn't go down */
+		pm_runtime_get_sync(dev->dev);
+		/*
+		 * checking framer here will wake-up ADSP and may avoid framer
+		 * handover later
+		 */
+		msm_slim_qmi_check_framer_request(dev);
+		dev->mdm.state = MSM_CTRL_DOWN;
 		break;
 	case SUBSYS_AFTER_POWERUP:
-		ret = msm_slim_qmi_check_framer_request(dev);
+		if (dev->mdm.state != MSM_CTRL_DOWN)
+			return NOTIFY_DONE;
 		dev_err(dev->dev,
-			"%s:SLIM %lu external_modem SSR notify cb, ret %d",
-			__func__, code, ret);
-		/*
-		 * Next codec transaction will reinit the HW
-		 * if it was suspended
-		 */
-		if (pm_runtime_suspended(dev->dev) ||
-			dev->state >= MSM_CTRL_ASLEEP) {
-			break;
-		} else {
-			ngd_slim_power_up(dev);
-			msm_slim_put_ctrl(dev);
+			"SLIM %lu external_modem SSR notify cb", code);
+		msm_slim_qmi_check_framer_request(dev);
+		/* If NGD enumeration is lost, we will need to power us up */
+		ngd = dev->base + NGD_BASE(dev->ctrl.nr, dev->ver);
+		laddr = readl_relaxed(ngd + NGD_STATUS);
+		if (!(laddr & NGD_LADDR)) {
+			pr_err("SLIM MDM SSR (active framer on MDM) dev-down");
+			list_for_each_entry(sbdev, &ctrl->devs, dev_list)
+				slim_report_absent(sbdev);
 		}
+		ngd_slim_power_up(dev, true);
+		msm_slim_put_ctrl(dev);
+		dev->mdm.state = MSM_CTRL_AWAKE;
+		break;
 	default:
 		break;
 	}
@@ -906,7 +894,7 @@ capability_retry:
 	}
 }
 
-static int ngd_slim_power_up(struct msm_slim_ctrl *dev)
+static int ngd_slim_power_up(struct msm_slim_ctrl *dev, bool mdm_restart)
 {
 	void __iomem *ngd;
 	int timeout, ret = 0;
@@ -917,7 +905,7 @@ static int ngd_slim_power_up(struct msm_slim_ctrl *dev)
 			NGD_INT_IE_VE_CHG | NGD_INT_DEV_ERR |
 			NGD_INT_TX_MSG_SENT | NGD_INT_RX_MSG_RCVD);
 
-	if (cur_state == MSM_CTRL_DOWN) {
+	if (!mdm_restart && cur_state == MSM_CTRL_DOWN) {
 		int timeout = wait_for_completion_timeout(&dev->qmi.qmi_comp,
 						HZ);
 		if (!timeout)
@@ -925,7 +913,8 @@ static int ngd_slim_power_up(struct msm_slim_ctrl *dev)
 	}
 
 	/* No need to vote if contorller is not in low power mode */
-	if (cur_state == MSM_CTRL_DOWN || cur_state == MSM_CTRL_ASLEEP) {
+	if (!mdm_restart &&
+		(cur_state == MSM_CTRL_DOWN || cur_state == MSM_CTRL_ASLEEP)) {
 		ret = msm_slim_qmi_power_request(dev, true);
 		if (ret) {
 			pr_err("SLIM QMI power request failed:%d", ret);
@@ -945,7 +934,7 @@ static int ngd_slim_power_up(struct msm_slim_ctrl *dev)
 		 * For example, modem restarted when playback was active
 		 */
 		if (cur_state == MSM_CTRL_AWAKE) {
-			pr_err("SLIM MDM restart: ADSP active framer:NO OP");
+			pr_err("Subsys restart: ADSP active framer");
 			return 0;
 		}
 		/*
@@ -954,24 +943,26 @@ static int ngd_slim_power_up(struct msm_slim_ctrl *dev)
 		 */
 		ngd_slim_setup_msg_path(dev);
 		return 0;
-	} else if (cur_state == MSM_CTRL_ASLEEP) {
-		pr_debug("ADSP P.C. CTRL state:%d NGD not enumerated:0x%x",
-					dev->state, laddr);
-	} else if (cur_state == MSM_CTRL_IDLE || cur_state == MSM_CTRL_AWAKE) {
+	}
+
+	if (mdm_restart) {
 		/*
-		 * external MDM SSR when only voice call is in progress.
+		 * external MDM SSR when MDM is active framer
 		 * ADSP will reset slimbus HW. disconnect BAM pipes so that
 		 * they can be connected after capability message is received.
 		 * Set device state to ASLEEP to be synchronous with the HW
 		 */
+		/* make current state as DOWN */
+		cur_state = MSM_CTRL_DOWN;
 		pr_err("SLIM MDM restart: MDM active framer: reinit HW");
-		dev->state = MSM_CTRL_ASLEEP;
-		msm_slim_disconnect_endp(dev, &dev->rx_msgq,
-					&dev->use_rx_msgqs);
-		msm_slim_disconnect_endp(dev, &dev->tx_msgq,
-					&dev->use_tx_msgqs);
+		/* disconnect BAM pipes */
+		if (dev->use_rx_msgqs == MSM_MSGQ_ENABLED)
+			dev->use_rx_msgqs = MSM_MSGQ_DOWN;
+		if (dev->use_tx_msgqs == MSM_MSGQ_ENABLED)
+			dev->use_tx_msgqs = MSM_MSGQ_DOWN;
+		dev->state = MSM_CTRL_DOWN;
 	}
-	/* ADSP SSR scenario, need to disconnect pipe before connecting */
+	/* SSR scenario, need to disconnect pipe before connecting */
 	if (dev->use_rx_msgqs == MSM_MSGQ_DOWN) {
 		struct msm_slim_endp *endpoint = &dev->rx_msgq;
 		sps_disconnect(endpoint->sps);
@@ -1028,7 +1019,7 @@ static int ngd_slim_enable(struct msm_slim_ctrl *dev, bool enable)
 			 * framework state
 			 */
 			if (ret)
-				ngd_slim_power_up(dev);
+				ngd_slim_power_up(dev, false);
 			if (!pm_runtime_enabled(dev->dev) ||
 					!pm_runtime_suspended(dev->dev))
 				ngd_slim_runtime_resume(dev->dev);
@@ -1049,7 +1040,7 @@ static int ngd_slim_enable(struct msm_slim_ctrl *dev, bool enable)
 static int ngd_clk_pause_wakeup(struct slim_controller *ctrl)
 {
 	struct msm_slim_ctrl *dev = slim_get_ctrldata(ctrl);
-	return ngd_slim_power_up(dev);
+	return ngd_slim_power_up(dev, false);
 }
 
 static int ngd_slim_rx_msgq_thread(void *data)
@@ -1185,6 +1176,7 @@ static int __devinit ngd_slim_probe(struct platform_device *pdev)
 	#endif
 
 	bool			slim_mdm = false;
+	const char		*ext_modem_id = NULL;
 
 	slim_mem = platform_get_resource_byname(pdev, IORESOURCE_MEM,
 						"slimbus_physical");
@@ -1272,8 +1264,10 @@ static int __devinit ngd_slim_probe(struct platform_device *pdev)
 					&dev->pdata.apps_pipes);
 		of_property_read_u32(pdev->dev.of_node, "qcom,ea-pc",
 					&dev->pdata.eapc);
-		slim_mdm = of_property_read_bool(pdev->dev.of_node,
-					"qcom,slim-mdm");
+		ret = of_property_read_string(pdev->dev.of_node,
+					"qcom,slim-mdm", &ext_modem_id);
+		if (!ret)
+			slim_mdm = true;
 	} else {
 		dev->ctrl.nr = pdev->id;
 	}
@@ -1347,7 +1341,7 @@ static int __devinit ngd_slim_probe(struct platform_device *pdev)
 
 	if (slim_mdm) {
 		dev->mdm.nb.notifier_call = mdm_ssr_notify_cb;
-		dev->mdm.ssr = subsys_notif_register_notifier("external_modem",
+		dev->mdm.ssr = subsys_notif_register_notifier(ext_modem_id,
 							&dev->mdm.nb);
 		if (IS_ERR_OR_NULL(dev->mdm.ssr))
 			dev_err(dev->dev,

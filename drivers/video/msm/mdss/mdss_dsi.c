@@ -85,34 +85,20 @@ static int mdss_dsi_panel_power_on(struct mdss_panel_data *pdata, int enable)
 			goto error;
 		}
 
-		if (pdata->panel_info.panel_power_on == 0) {
-#ifndef CONFIG_VENDOR_EDIT
-			ret = mdss_dsi_panel_reset(pdata, 1);
-			if (ret) {
-				pr_err("%s: Panel reset failed. rc=%d\n",
-						__func__, ret);
-				if (msm_dss_enable_vreg(
-				ctrl_pdata->power_data.vreg_config,
-				ctrl_pdata->power_data.num_vreg, 0))
-					pr_err("Disable vregs failed\n");
-				goto error;
-			}
-#else
-            mdss_dsi_panel_reset(pdata, 1);
-#endif
-		}
+        if (!pdata->panel_info.mipi.lp11_init) {
+		    ret = mdss_dsi_panel_reset(pdata, 1);
+		    if (ret) {
+			       pr_err("%s: Panel reset failed. rc=%d\n",
+					    __func__, ret);
+			    if (msm_dss_enable_vreg(
+			    ctrl_pdata->power_data.vreg_config,
+			    ctrl_pdata->power_data.num_vreg, 0))
+				    pr_err("Disable vregs failed\n");
+			    goto error;
+		    }
+        }
 	} else {
-
-#ifndef CONFIG_VENDOR_EDIT
-		ret = mdss_dsi_panel_reset(pdata, 0);
-		if (ret) {
-			pr_err("%s: Panel reset failed. rc=%d\n",
-					__func__, ret);
-			goto error;
-		}
-#else
-        mdss_dsi_panel_reset(pdata, 0);
-#endif
+            ret = mdss_dsi_panel_reset(pdata, 0);
 
 #ifndef VENDOR_EDIT
 /* Xiaori.Yuan@Mobile Phone Software Dept.Driver, 2014/04/02  Modify for probabilistic blurred screen for find7s */

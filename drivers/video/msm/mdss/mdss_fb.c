@@ -279,7 +279,9 @@ static ssize_t mdss_fb_get_type(struct device *dev,
 static void mdss_fb_parse_dt(struct msm_fb_data_type *mfd)
 {
 	u32 data[2] = {0};
+#ifndef CONFIG_VENDOR_EDIT
 	u32 panel_xres;
+#endif
 	struct platform_device *pdev = mfd->pdev;
 
 	mfd->splash_logo_enabled = of_property_read_bool(pdev->dev.of_node,

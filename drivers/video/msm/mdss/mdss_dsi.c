@@ -85,7 +85,7 @@ static int mdss_dsi_panel_power_on(struct mdss_panel_data *pdata, int enable)
 			goto error;
 		}
 
-        if (!pdata->panel_info.mipi.lp11_init) {
+        if (pdata->panel_info.panel_power_on == 0) {
 		    ret = mdss_dsi_panel_reset(pdata, 1);
 		    if (ret) {
 			       pr_err("%s: Panel reset failed. rc=%d\n",
@@ -99,6 +99,11 @@ static int mdss_dsi_panel_power_on(struct mdss_panel_data *pdata, int enable)
         }
 	} else {
             ret = mdss_dsi_panel_reset(pdata, 0);
+	        if (ret) {
+                pr_err("%s: Panel reset failed. rc=%d\n",
+                    __func__, ret);
+                goto error;
+            }
 
 #ifndef VENDOR_EDIT
 /* Xiaori.Yuan@Mobile Phone Software Dept.Driver, 2014/04/02  Modify for probabilistic blurred screen for find7s */

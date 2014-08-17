@@ -439,31 +439,23 @@ int mdss_dsi_on(struct mdss_panel_data *pdata)
 #endif
 
 	if (!pdata->panel_info.mipi.lp11_init) {
-#ifndef CONFIG_VENDOR_EDIT
 		ret = mdss_dsi_panel_reset(pdata, 1);
 		if (ret) {
 			pr_err("%s: Panel reset failed. rc=%d\n",
 					__func__, ret);
 			return ret;
 		}
-#else
-        mdss_dsi_panel_reset(pdata, 1);
-#endif
 	}
 	ret = mdss_dsi_bus_clk_start(ctrl_pdata);
 	if (ret) {
 		pr_err("%s: failed to enable bus clocks. rc=%d\n", __func__,
 			ret);
-#ifndef CONFIG_VENDOR_EDIT
 		ret = mdss_dsi_panel_power_on(pdata, 0);
 		if (ret) {
 			pr_err("%s: Panel reset failed. rc=%d\n",
 					__func__, ret);
 			return ret;
 		}
-#else
-        mdss_dsi_panel_power_on(pdata, 0);
-#endif
 		pdata->panel_info.panel_power_on = 0;
 		return ret;
 	}
@@ -551,16 +543,12 @@ int mdss_dsi_on(struct mdss_panel_data *pdata)
 	 * data lanes for LP11 init
 	 */
 	if (pdata->panel_info.mipi.lp11_init) {
-#ifndef CONFIG_VENDOR_EDIT
 		ret = mdss_dsi_panel_reset(pdata, 1);
 		if (ret) {
 			pr_err("%s: Panel reset failed. rc=%d\n",
 					__func__, ret);
 			return ret;
 		}
-#else
-        mdss_dsi_panel_reset(pdata, 1);
-#endif
 	}
 	if (pdata->panel_info.mipi.init_delay)
 		usleep(pdata->panel_info.mipi.init_delay);

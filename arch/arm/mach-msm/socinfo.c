@@ -177,6 +177,9 @@ struct socinfo_v8 {
 #ifdef CONFIG_VENDOR_EDIT
 struct socinfo_v9 {
 	char hw_pcb_version[10];
+
+	/* only valid when format==9*/
+	uint32_t foundry_id;
 };
 struct socinfo_v10 {
 	char hw_rf_version[10];

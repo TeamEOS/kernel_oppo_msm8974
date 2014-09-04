@@ -86,6 +86,7 @@ static int mdss_dsi_panel_power_on(struct mdss_panel_data *pdata, int enable)
 		}
 
         if (!pdata->panel_info.mipi.lp11_init) {
+#ifndef CONFIG_VENDOR_EDIT
 		    ret = mdss_dsi_panel_reset(pdata, 1);
 		    if (ret) {
 			       pr_err("%s: Panel reset failed. rc=%d\n",
@@ -96,9 +97,21 @@ static int mdss_dsi_panel_power_on(struct mdss_panel_data *pdata, int enable)
 				    pr_err("Disable vregs failed\n");
 			    goto error;
 		    }
+#else
+                    mdss_dsi_panel_reset(pdata, 1);
+#endif
         }
 	} else {
+#ifndef CONFIG_VENDOR_EDIT
             ret = mdss_dsi_panel_reset(pdata, 0);
+	        if (ret) {
+                pr_err("%s: Panel reset failed. rc=%d\n",
+                    __func__, ret);
+                goto error;
+            }
+#else
+            mdss_dsi_panel_reset(pdata, 0);
+#endif
 
 #ifndef VENDOR_EDIT
 /* Xiaori.Yuan@Mobile Phone Software Dept.Driver, 2014/04/02  Modify for probabilistic blurred screen for find7s */

@@ -1548,6 +1548,8 @@ ctrl_pdata->index=index;
 		if (!gpio_is_valid(ctrl_pdata->mode_gpio))
 			pr_info("%s:%d, mode gpio not specified\n",
 							__func__, __LINE__);
+	} else {
+		ctrl_pdata->mode_gpio = -EINVAL;
 	}
 /* OPPO 2014-02-21 yxq add begin for Find7S */
 		}else{

@@ -35,6 +35,9 @@
 #include <linux/pm_runtime.h>
 #include <linux/kernel.h>
 #include <linux/gpio.h>
+#include <linux/pm_qos.h>
+#include <linux/pm.h>
+#include <mach/cpuidle.h>
 #include "wcd9320.h"
 #include "wcd9xxx-resmgr.h"
 #include "wcd9xxx-common.h"
@@ -469,14 +472,14 @@ struct taiko_priv {
 	 * end of impedance measurement
 	 */
 	struct list_head reg_save_restore;
+	struct pm_qos_request pm_qos_req;
+
 	#ifdef CONFIG_VENDOR_EDIT
 	/*liuyan add 2013-11-26 for hpmic regulator*/
 	struct regulator	*cdc_hpmic_switch;
 	int hpmic_regulator_count;
 	/*endif*/
 	#endif
-
-	struct wake_lock taiko_mad_wlock; //2014-2-13 xuzhaoan add for SVA patch
 };
 
 /* OPPO 2013-11-12 xuzhaoan Add begin for American Headset Detect */
@@ -2822,10 +2825,15 @@ static int taiko_codec_config_mad(struct snd_soc_codec *codec)
 	const struct firmware *fw;
 	struct mad_audio_cal *mad_cal;
 	const char *filename = TAIKO_MAD_AUDIO_FIRMWARE_PATH;
-	struct taiko_priv *taiko = snd_soc_codec_get_drvdata(codec); //2014-2-13 xuzhaoan add for SVA patch
+	struct taiko_priv *taiko = snd_soc_codec_get_drvdata(codec);
 
 	pr_debug("%s: enter\n", __func__);
-	wake_lock(&taiko->taiko_mad_wlock); //2014-2-13 xuzhaoan add for SVA patch
+	/* wakeup for codec calibration access */
+	pm_qos_add_request(&taiko->pm_qos_req,
+			   PM_QOS_CPU_DMA_LATENCY,
+			   PM_QOS_DEFAULT_VALUE);
+	pm_qos_update_request(&taiko->pm_qos_req,
+			      msm_cpuidle_get_deep_idle_latency());
 	ret = request_firmware(&fw, filename, codec->dev);
 	if (ret != 0) {
 		pr_err("Failed to acquire MAD firwmare data %s: %d\n", filename,
@@ -2895,8 +2903,9 @@ static int taiko_codec_config_mad(struct snd_soc_codec *codec)
 
 	release_firmware(fw);
 	pr_debug("%s: leave ret %d\n", __func__, ret);
-
-	wake_unlock(&taiko->taiko_mad_wlock); //2014-2-13 xuzhaoan add for SVA patch 2-25 uncomment this line to release wakelock to save power
+	pm_qos_update_request(&taiko->pm_qos_req,
+			      PM_QOS_DEFAULT_VALUE);
+	pm_qos_remove_request(&taiko->pm_qos_req);
 	return ret;
 }
 
@@ -7632,9 +7641,6 @@ static int taiko_codec_probe(struct snd_soc_codec *codec)
 		goto err_irq;
 	}
 
-	wake_lock_init(&taiko->taiko_mad_wlock, WAKE_LOCK_SUSPEND,
-	        "taiko_mad_firmware_wlock"); //2014-2-13 xuzhaoan add for SVA patch
-
 	atomic_set(&kp_taiko_priv, (unsigned long)taiko);
 	mutex_lock(&dapm->codec->mutex);
 	snd_soc_dapm_disable_pin(dapm, "ANC HPHL");
@@ -7691,7 +7697,6 @@ static int taiko_codec_remove(struct snd_soc_codec *codec)
 
 	taiko->spkdrv_reg = NULL;
 
-	wake_lock_destroy(&taiko->taiko_mad_wlock); //2014-2-13 xuzhaoan add for SVA patch
 	kfree(taiko);
 	return 0;
 }
